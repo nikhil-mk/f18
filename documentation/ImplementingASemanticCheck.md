@@ -21,13 +21,12 @@ Except for the incrementation of the DO variable that occurs in step (3), the DO
 shall neither be redefined nor become undefined while the DO construct is active.
 ```
 One of the ways that DO variables might be redefined is if they are passed to
-functions with dummy arguments whose ```INTENT``` is ```INTENT(IN)``` or
-```INTENT(INOUT)```.  I implemented the changes to perform this semantic check.
-Specifically, I changed the compiler to emit an error message if an active DO
-variable was passed to a dummy argument of a function with INTENT(OUT).
-Similarly, I had the compiler emit a warning if an active DO variable was
-passed to a dummy argument with INTENT(INOUT).  Prior to starting this
-implementation, I had previously implemented similar checks for subroutine
+functions with dummy arguments whose `INTENT` is `INTENT(OUT)` or
+`INTENT(INOUT)`.  I implemented this semantic check.  Specifically, I changed
+the compiler to emit an error message if an active DO variable was passed to a
+dummy argument of a function with INTENT(OUT).  Similarly, I had the compiler
+emit a warning if an active DO variable was passed to a dummy argument with
+INTENT(INOUT).  Previously, I had implemented similar checks for subroutine
 calls.
 
 # Creating a test
@@ -53,7 +52,7 @@ My first step was to create a test case to cause the problem.  I called it testf
 ```
 
 I verified that other Fortran compilers produced an error message at the point
-of the call to ```intentOutFunc()```:
+of the call to `intentOutFunc()`:
 
 ```fortran
       jvar = intentOutFunc(ivar) ! Error since ivar is a DO variable
@@ -88,8 +87,8 @@ Here's the relevant fragment of the parse tree produced by the compiler:
 | | | EndDoStmt -> 
 ```
 
-Note that this fragment of the tree only shows four ```parser::Expr``` nodes,
-but the full parse tree also contained a fifth ```parser::Expr``` node for the
+Note that this fragment of the tree only shows four `parser::Expr` nodes,
+but the full parse tree also contained a fifth `parser::Expr` node for the
 constant 216 in the statement:
 
 ```fortran
@@ -98,8 +97,8 @@ constant 216 in the statement:
 # Analysis and implementation planning
 
 I then considered what I needed to do.  I needed to detect situations where an
-active DO variable was passed to a dummy argument with ```INTENT(OUT)``` or
-```INTENT(INOUT)```.  Once I detected such a situation, I needed to produce a
+active DO variable was passed to a dummy argument with `INTENT(OUT)` or
+`INTENT(INOUT)`.  Once I detected such a situation, I needed to produce a
 message that highlighted the erroneous source code.  
 
 When implementing a similar check for subroutine calls, I created a utility
@@ -111,13 +110,13 @@ a symbol corresponding to an active DO variable was being potentially modified:
   void CheckDoVarRedefine(const parser::CharBlock &, const Symbol &);
 ```
 
-The first function is intended for dummy arguments of ```INTENT(INOUT)``` and
-the second for ```INTENT(OUT)```.
+The first function is intended for dummy arguments of `INTENT(INOUT)` and
+the second for `INTENT(OUT)`.
 
 Thus I needed three pieces of
 information -- 
 1. the source location of the erroneous text, 
-2. the ```INTENT``` of the associated dummy argument. and
+2. the `INTENT` of the associated dummy argument, and
 3. the relevant symbol passed as the actual argument.
 
 The first and third are needed since they're required to call the utility
@@ -132,41 +131,40 @@ with this framework from my experience implementing other semantic checks.
 
 The source code location information that I'd need for the error message must
 come from the parse tree.  I looked in the file .../lib/parser/parse-tree.h and
-determined that a ```struct Expr``` contained source location information since
-it had the field ```CharBlock source```.  Thus, if I visited a
-```parser::Expr``` node, I could get the source location information for the
+determined that a `struct Expr` contained source location information since
+it had the field `CharBlock source`.  Thus, if I visited a
+`parser::Expr` node, I could get the source location information for the
 associated expression.
 
-## Determining the ```INTENT```
-I knew from previous experience that I could find the
-```INTENT``` of the dummy argument associated with the actual argument from the
-a function called ```dummyIntent()``` in the class
-```evaluate::ActualArgument``` in the file .../lib/evaluate/call.h.  So if I
-could find an ```evaluate::ActualArgument``` in the expression being passed to
-a function, I could determine the ```INTENT``` of the associated dummy
-argument.  I knew that it was valid to call ```dummyIntent()``` because the
-data on which ```dummyIntent()```  depends is established during semantic
-processing for expressions, and the semantic processing for expressions happens
-before semantic checking for DO constructs.
+## Determining the `INTENT`
+I knew from previous experience that I could find the `INTENT` of the dummy
+argument associated with the actual argument from the function called
+`dummyIntent()` in the class `evaluate::ActualArgument` in the file
+.../lib/evaluate/call.h.  So if I could find an `evaluate::ActualArgument` in
+the expression being passed to a function, I could determine the `INTENT` of
+the associated dummy argument.  I knew that it was valid to call
+`dummyIntent()` because the data on which `dummyIntent()`  depends is
+established during semantic processing for expressions, and the semantic
+processing for expressions happens before semantic checking for DO constructs.
 
 Furthermore, I knew that there was an existing framework used in DO construct
-semantic checking that traversed an ```evaluate::Expr``` node collecting all of
-the ```Symbol``` nodes.  I guessed that I'd be able to use a similar framework
-to traverse an ``` evaluate::Expr```  node to find all of the ```
-evaluate::ActualArgument``` nodes.  
+semantic checking that traversed an `evaluate::Expr` node collecting all of
+the `Symbol` nodes.  I guessed that I'd be able to use a similar framework
+to traverse an ` evaluate::Expr`  node to find all of the
+`evaluate::ActualArgument` nodes.  
 
-So my plan was to start with the ```parser::Expr``` node and extract its
-associated ```evaluate::Expr``` field.  I would then traverse the
-```evaluate::Expr``` tree collecting all of the ```evaluate::ActualArgument```
-nodes.  I would look at each of these nodes to determine the ```INTENT``` of
+So my plan was to start with the `parser::Expr` node and extract its
+associated `evaluate::Expr` field.  I would then traverse the
+`evaluate::Expr` tree collecting all of the `evaluate::ActualArgument`
+nodes.  I would look at each of these nodes to determine the `INTENT` of
 the associated dummy argument.
 
-This combination of the traveral framework and ```dummyIntent()``` would give
-me the ```INTENT``` of all of the dummy arguments in a function call.  Thus, I
+This combination of the traversal framework and `dummyIntent()` would give
+me the `INTENT` of all of the dummy arguments in a function call.  Thus, I
 would have the second piece of information I needed.
 
 ## Determining if the actual argument is a variable
-I also guessed that I could determine if the ```evaluate::ActualArgument```
+I also guessed that I could determine if the `evaluate::ActualArgument`
 consisted of a variable.  
 
 Once I had a symbol for the variable, I could call one of the functions:
@@ -177,14 +175,14 @@ Once I had a symbol for the variable, I could call one of the functions:
 to emit the messages.
 
 If my plans worked out, this would give me the three pieces of information I
-needed -- the source location of the erroneous text, the ```INTENT``` of the dummy
+needed -- the source location of the erroneous text, the `INTENT` of the dummy
 argument, and a symbol that I could use to determine whether the actual
 argument was an active DO variable.
 
 # Implementation
 
 ## Adding a parse tree visitor
-I started my implementation by adding a visitor for ```parser::Expr``` nodes.
+I started my implementation by adding a visitor for `parser::Expr` nodes.
 Since this analysis is part of DO construct checking, I did this in
 .../lib/semantics/check-do.[cc,h].  I added a print statement to the visitor to
 verify that my new code was actually getting executed.  
@@ -219,20 +217,20 @@ This produced the output:
   In Leave for parser::Expr
 ```
 
-This made sense since the parse tree contained five ```parser::Expr``` nodes.
-So far, so good.  Note that a ```parse::Expr``` node has a field with the
-source position of the associated expression (```CharBlock source```).  So I
+This made sense since the parse tree contained five `parser::Expr` nodes.
+So far, so good.  Note that a `parse::Expr` node has a field with the
+source position of the associated expression (`CharBlock source`).  So I
 now had one of the three pieces of information needed to detect and report
 errors.
 
 ## Collecting the actual arguments
-To get the ```INTENT``` of the dummy arguments and the ```Symbol``` associated with the
+To get the `INTENT` of the dummy arguments and the `Symbol` associated with the
 actual argument, I needed to find all of the actual arguments embedded in an
 expression that contained a function call.  So my next step was to write the
-framework to walk the ```evaluate::Expr``` to gather all of the
-```evaluate::ActualArgument``` nodes.  The code that I planned to model it on
-was the existing infrastructure that collected all of the ```Symbol``` nodes from an
-```evaluate::Expr```.  I found this implementation in
+framework to walk the `evaluate::Expr` to gather all of the
+`evaluate::ActualArgument` nodes.  The code that I planned to model it on
+was the existing infrastructure that collected all of the `Symbol` nodes from an
+`evaluate::Expr`.  I found this implementation in
 .../lib/evaluate/tools.cc:
 
 ```C++
@@ -250,40 +248,40 @@ was the existing infrastructure that collected all of the ```Symbol``` nodes fro
   }
 ```
 
-Note that the ```CollectSymbols()``` function returns a ```semantics::Symbolset```, which is declared in .../lib/semantics/symbol.h:
+Note that the `CollectSymbols()` function returns a `semantics::Symbolset`, which is declared in .../lib/semantics/symbol.h:
 
 ```C++
   using SymbolSet = std::set<SymbolRef>;
 ```
 
-This infrastructure yields a collection based on ```std::set<>```.  Using an
-```std::set<>``` means that if the same object is inserted twice, the
+This infrastructure yields a collection based on `std::set<>`.  Using an
+`std::set<>` means that if the same object is inserted twice, the
 collection only gets one copy.  This was the behavior that I wanted.
 
-Here's a sample invocation of ```CollectSymbols()``` that I found:
+Here's a sample invocation of `CollectSymbols()` that I found:
 ```C++
     if (const auto *expr{GetExpr(parsedExpr)}) {
       for (const Symbol &symbol : evaluate::CollectSymbols(*expr)) {
 ```
 
-I noted that a ```SymbolSet``` did not actually contain an
-```std::set<Symbol>```.  This wasn't surprising since we don't want to put the
-full ```Symbol``` objects into the set.  Ideally, we would be able to create an
-```std::set<Symbol &>``` (a set of C++ references to symbols).  But C++ doesn't
+I noted that a `SymbolSet` did not actually contain an
+`std::set<Symbol>`.  This wasn't surprising since we don't want to put the
+full `Symbol` objects into the set.  Ideally, we would be able to create an
+`std::set<Symbol &>` (a set of C++ references to symbols).  But C++ doesn't
 support sets that contain references.  This limitation is part of the rationale
-for the f18 implementation of type ```common::Reference```, which is defined in
+for the f18 implementation of type `common::Reference`, which is defined in
   .../lib/common/reference.h.
 
-```SymbolRef```, the specialization of the template ```common::Reference``` for
-```Symbol```, is declared in the file .../lib/semantics/symbol.h:
+`SymbolRef`, the specialization of the template `common::Reference` for
+`Symbol`, is declared in the file .../lib/semantics/symbol.h:
 
 ```C++
   using SymbolRef = common::Reference<const Symbol>;
 ```
 
-So to implement something that would collect ```evaluate::ActualArgument```
-nodes from an ```evaluate::Expr```, I first defined the required types
-```ActualArgumentRef``` and ```ActualArgumentSet```.  Since these are being
+So to implement something that would collect `evaluate::ActualArgument`
+nodes from an `evaluate::Expr`, I first defined the required types
+`ActualArgumentRef` and `ActualArgumentSet`.  Since these are being
 used exclusively for DO construct semantic checking (currently), I put their
 definitions into .../lib/semantics/check-do.cc:
 
@@ -297,11 +295,11 @@ definitions into .../lib/semantics/check-do.cc:
   using ActualArgumentSet = std::set<evaluate::ActualArgumentRef>;
 ```
 
-Since ```ActualArgument``` is in the namespace ```evaluate```, I put the
-definition for ```ActualArgumentRef``` in that namespace, too.
+Since `ActualArgument` is in the namespace `evaluate`, I put the
+definition for `ActualArgumentRef` in that namespace, too.
 
-I then modeled the code to create an ```ActualArgumentSet``` after the code to
-collect a ```SymbolSet``` and put it into check-do.cc:
+I then modeled the code to create an `ActualArgumentSet` after the code to
+collect a `SymbolSet` and put it into check-do.cc:
 
 
 ```C++
@@ -324,8 +322,8 @@ collect a ```SymbolSet``` and put it into check-do.cc:
 ```
 
 Unfortunately, when I tried to build this code, I got an error message saying
-```std::set``` requires the ```<``` operator to be defined for its contents.
-To fix this, I added a definition for ```<```.  I didn't care how ```<``` was
+`std::set` requires the `<` operator to be defined for its contents.
+To fix this, I added a definition for `<`.  I didn't care how `<` was
 defined, so I just used the address of the object:
 
 ```C++
@@ -335,8 +333,8 @@ defined, so I just used the address of the object:
 ```
 
 I was surprised when this did not make the error message saying that I needed
-the ```<``` operator go away.  Eventually, I figured out that the definition of
-the ```<``` operator needed to be in the ```evaluate``` namespace.  Once I put
+the `<` operator go away.  Eventually, I figured out that the definition of
+the `<` operator needed to be in the `evaluate` namespace.  Once I put
 it there, everything compiled successfully.  Here's the code that worked:
 
 ```C++
@@ -351,9 +349,9 @@ it there, everything compiled successfully.  Here's the code that worked:
 
 I then modified my visitor for the parser::Expr to invoke my new collection
 framework.  To verify that it was actually doing something, I printed out the
-number of ```evaluate::ActualArgument``` nodes that it collected.  Note the
-call to ```GetExpr()``` in the invocation of ```CollectActualArguments()```.  I
-modeled this on similar code that collected a ```SymbolSet``` described above:
+number of `evaluate::ActualArgument` nodes that it collected.  Note the
+call to `GetExpr()` in the invocation of `CollectActualArguments()`.  I
+modeled this on similar code that collected a `SymbolSet` described above:
 
 ```C++
   void DoChecker::Leave(const parser::Expr &parsedExpr) {
@@ -377,23 +375,23 @@ I compiled and tested this code on my little test program.  Here's the output th
   Number of arguments: 0
 ```
 
-So most of the ```parser::Expr```nodes contained no actual arguments, but the
+So most of the `parser::Expr`nodes contained no actual arguments, but the
 fourth expression in the parse tree walk contained a single argument.  This may
-seem wrong since the third ```parser::Expr``` node in the file contains the
-```FunctionReference``` node along with the arguments that we're gathering.
+seem wrong since the third `parser::Expr` node in the file contains the
+`FunctionReference` node along with the arguments that we're gathering.
 But since the tree walk function is being called upon leaving a
-```parser::Expr``` node, the function visits the ```parser::Expr``` node
-associated with the ```parser::ActualArg``` node before it visits the
-```parser::Expr``` node associated with the ```parser::FunctionReference```
+`parser::Expr` node, the function visits the `parser::Expr` node
+associated with the `parser::ActualArg` node before it visits the
+`parser::Expr` node associated with the `parser::FunctionReference`
 node.
 
 So far, so good.
 
-## Finding the ```INTENT``` of the dummy argument
-I now wanted to find the ```INTENT``` of the dummy argument associated with the
-argments in the set.  As mentioned earlier, the type
-```evaluate::ActualArgument``` has a member function called ```dummyIntent()```
-that gives this value.  So I augmented my code to print out the ```INTENT```:
+## Finding the `INTENT` of the dummy argument
+I now wanted to find the `INTENT` of the dummy argument associated with the
+arguments in the set.  As mentioned earlier, the type
+`evaluate::ActualArgument` has a member function called `dummyIntent()`
+that gives this value.  So I augmented my code to print out the `INTENT`:
 
 ```C++
   void DoChecker::Leave(const parser::Expr &parsedExpr) {
@@ -429,19 +427,19 @@ I then rebuilt my compiler and ran it on my test case.  This produced the follow
 ```
 
 I then modified my test case to convince myself that I was getting the correct
-```INTENT``` for ```IN```, ```INOUT```, and default cases.
+`INTENT` for `IN`, `INOUT`, and default cases.
 
 So far, so good.
 
 ## Finding the symbols for arguments that are variables
 The third and last piece of information I needed was to determine if a variable
 was being passed as an actual argument.  In such cases, I wanted to get the
-symbol table node (```Symbol```) for the variable.  My starting point was the
-```evaluate::ActualArgument``` node.  
+symbol table node (`Symbol`) for the variable.  My starting point was the
+`evaluate::ActualArgument` node.  
 
 I was unsure of how to do this, so I browsed through existing code to look for
-how it treated ```evaluate::ActualArgument``` objects.  Since most of the code that deals with the ```evaluate``` namespace is in the .../lib/evaluate directory, I looked there.  I ran ```grep``` on all of the ```.cc``` files looking for
-uses of ```ActualArgument```.  One of the first hits I got was in .../lib/evaluate/call.cc in the definition of ```ActualArgument::GetType()```:
+how it treated `evaluate::ActualArgument` objects.  Since most of the code that deals with the `evaluate` namespace is in the .../lib/evaluate directory, I looked there.  I ran `grep` on all of the `.cc` files looking for
+uses of `ActualArgument`.  One of the first hits I got was in .../lib/evaluate/call.cc in the definition of `ActualArgument::GetType()`:
 
 ```C++
 std::optional<DynamicType> ActualArgument::GetType() const {
@@ -455,14 +453,14 @@ std::optional<DynamicType> ActualArgument::GetType() const {
 }
 ```
 
-I noted the call to ```UnwrapExpr()``` that yielded a value of
-```Expr<SomeType>```.  So I guessed that I could use this member function to
-get an ```evaluate::Expr<SomeType>``` on which I could perform further analysis.
+I noted the call to `UnwrapExpr()` that yielded a value of
+`Expr<SomeType>`.  So I guessed that I could use this member function to
+get an `evaluate::Expr<SomeType>` on which I could perform further analysis.
 
 I also knew that the header file .../lib/evaluate/tools.h held many utility
-functions for dealing with ```evaluate::Expr``` objects.  I was hoping to find
-something that would determine if an ```evaluate::Expr``` was a variable.  So
-I searched for ```IsVariable``` and got a hit immediately.  
+functions for dealing with `evaluate::Expr` objects.  I was hoping to find
+something that would determine if an `evaluate::Expr` was a variable.  So
+I searched for `IsVariable` and got a hit immediately.  
 ```C++
   template<typename A> bool IsVariable(const A &x) {
     if (auto known{IsVariableHelper{}(x)}) {
@@ -473,10 +471,10 @@ I searched for ```IsVariable``` and got a hit immediately.
   }
 ```
 
-But I actually needed more than just the knowledge that an ```evaluate::Expr```
-was a variable.  I needed the ```Symbol``` associated with the variable.  So I
+But I actually needed more than just the knowledge that an `evaluate::Expr`
+was a variable.  I needed the `Symbol` associated with the variable.  So I
 searched in .../lib/evaluate/tools.h for functions that returned a
-```Symbol```.  I found the following:
+`Symbol`.  I found the following:
 
 ```C++
 // If an expression is simply a whole symbol data designator,
@@ -492,9 +490,9 @@ template<typename A> const Symbol *UnwrapWholeSymbolDataRef(const A &x) {
 ```
 
 This was exactly what I wanted.  DO variables must be whole symbols.  So I
-could try to extract a whole ```Symbol``` from the ```evaluate::Expr``` in my
-```evaluate::ActualArgument```.  If this extraction resulted in a ```Symbol```
-that wasn't a ```nullptr```, I could then conclude if it was a variable that I
+could try to extract a whole `Symbol` from the `evaluate::Expr` in my
+`evaluate::ActualArgument`.  If this extraction resulted in a `Symbol`
+that wasn't a `nullptr`, I could then conclude if it was a variable that I
 could pass to existing functions that would determine if it was an active DO
 variable.
 
@@ -530,7 +528,7 @@ Note the line that prints out the symbol table entry for the variable:
           std::cout << "Found a whole variable: " << *var << "\n";
 ```  
 
-The compiler defines the "<<" operator for ```Symbol```, which is handy
+The compiler defines the "<<" operator for `Symbol`, which is handy
 for analyzing the compiler's behavior.
 
 Here's the result of running the modified compiler on my Fortran test case:
@@ -555,7 +553,7 @@ Sweet.
 
 ## Emitting the messages
 At this point, using the source location information from the original
-```parser::Expr```, I had enough information to plug into the exiting
+`parser::Expr`, I had enough information to plug into the exiting
 interfaces for emitting messages for active DO variables.  I modified the
 compiler code accordingly:
 
@@ -589,7 +587,7 @@ compiler code accordingly:
   }
 ```  
 
-I then ran this code on my test case, and mirabile dictu, got the following
+I then ran this code on my test case, and miraculously, got the following
 output:
 
 ```
@@ -619,7 +617,7 @@ Even sweeter.
 # Improving the test case
 At this point, my implementation seemed to be working.  But I was concerned
 about the limitations of my test case.  So I augmented it to include arguments
-other than ```INTENT(OUT)``` and more complex expressions.  Luckily, my
+other than `INTENT(OUT)` and more complex expressions.  Luckily, my
 augmented test did not reveal any new problems.   
 
 Here's the test I ended up with:
@@ -678,7 +676,7 @@ Here's the test I ended up with:
 ```
 
 # Submitting the pull request
-At this point, my implementation seemed functionally complete, so I stripped out all of the debug statements, ran ```clang-format``` on it and reviewed it
+At this point, my implementation seemed functionally complete, so I stripped out all of the debug statements, ran `clang-format` on it and reviewed it
 to make sure that the names were clear.  Here's what I ended up with:
 
 ```C++
@@ -706,8 +704,8 @@ to make sure that the names were clear.  Here's what I ended up with:
 I then created a pull request to get review comments.  
 
 # Responding to pull request comments
-I got feedback suggesting that I use an ```if``` statement rather than a
-```case``` statement.  Another comment reminded me that I should look at the
+I got feedback suggesting that I use an `if` statement rather than a
+`case` statement.  Another comment reminded me that I should look at the
 code I'd previously writted to do a similar check for subroutine calls to see
 if there was an opportunity to share code.  This examination resulted in
   converting my existing code to the following pair of functions:
@@ -740,7 +738,7 @@ if there was an opportunity to share code.  This examination resulted in
   }
 ```
 
-The function ```CheckIfArgIsDoVar()``` was shared with the checks for DO
+The function `CheckIfArgIsDoVar()` was shared with the checks for DO
 variables being passed to subroutine calls.
 
 At this point, my pull request was approved, and I merged it and deleted the
