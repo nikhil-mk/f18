@@ -24,9 +24,9 @@ One of the ways that DO variables might be redefined is if they are passed to
 functions with dummy arguments whose `INTENT` is `INTENT(OUT)` or
 `INTENT(INOUT)`.  I implemented this semantic check.  Specifically, I changed
 the compiler to emit an error message if an active DO variable was passed to a
-dummy argument of a function with INTENT(OUT).  Similarly, I had the compiler
+dummy argument of a FUNCTION with INTENT(OUT).  Similarly, I had the compiler
 emit a warning if an active DO variable was passed to a dummy argument with
-INTENT(INOUT).  Previously, I had implemented similar checks for subroutine
+INTENT(INOUT).  Previously, I had implemented similar checks for SUBROUTINE
 calls.
 
 # Creating a test
@@ -101,13 +101,64 @@ active DO variable was passed to a dummy argument with `INTENT(OUT)` or
 `INTENT(INOUT)`.  Once I detected such a situation, I needed to produce a
 message that highlighted the erroneous source code.  
 
-When implementing a similar check for subroutine calls, I created a utility
+## Deciding where to add the code to the compiler
+This new semantic check would depend on several types of information -- the
+parse tree, source code location information, symbols, and expressions.  Thus I
+needed to put my new code in a place in the compiler after the parse tree had
+been created, name resolution had already happened, and expression semantic
+checking had already taken place.
+
+Most semantic checks for statements are implemented by walking the parse tree
+and performing analysis on the nodes they visit.  My plan was to use this
+method.  The infrastructure for walking the parse tree for statement semantic
+checking is implemented in the files .../lib/semantics/semantics.[cc,h].
+Here's a fragment of the declaration of the framework's parse tree visitor from
+.../lib/semantics/semantics.cc:
+
+```C++
+  // A parse tree visitor that calls Enter/Leave functions from each checker
+  // class C supplied as template parameters. Enter is called before the node's
+  // children are visited, Leave is called after. No two checkers may have the
+  // same Enter or Leave function. Each checker must be constructible from
+  // SemanticsContext and have BaseChecker as a virtual base class.
+  template<typename... C> class SemanticsVisitor : public virtual C... {
+  public:
+    using C::Enter...;
+    using C::Leave...;
+    using BaseChecker::Enter;
+    using BaseChecker::Leave;
+    SemanticsVisitor(SemanticsContext &context)
+      : C{context}..., context_{context} {}
+      ...
+
+```
+
+Since FUNCTION calls are a kind of expression, I was planning to base my
+implementation on the contents of `parser::Expr` nodes.  I would need to define
+either an `Enter()` or `Leave()` function whose parameter was a `parser::Expr`
+node.  Here's the declaration I put into check-do.h:
+
+```C++
+  void Leave(const parser::Expr &);
+```
+The `Enter()` functions get called at the time the node is first visited --
+that is, before its children.  The `Leave()` function gets called after the
+children are visited.  For my check the visitation order didn't matter, so I
+arbitrarily chose to implement the `Leave()` function to visit the parse tree
+node.
+
+Since my semantic check was focused on DO CONCURRENT statements, I added it to
+the file .../lib/semantics/check-do.cc where most of the semantic checking for
+DO statements already lived.
+
+## Taking advantage of prior work
+When implementing a similar check for SUBROUTINE calls, I created a utility
 functions in .../lib/semantics/semantics.[cc.h] to emit messages if
 a symbol corresponding to an active DO variable was being potentially modified:
 
 ```C++
-  void WarnDoVarRedefine(const parser::CharBlock &, const Symbol &);
-  void CheckDoVarRedefine(const parser::CharBlock &, const Symbol &);
+  void WarnDoVarRedefine(const parser::CharBlock &location, const Symbol &var);
+  void CheckDoVarRedefine(const parser::CharBlock &location, const Symbol &var);
 ```
 
 The first function is intended for dummy arguments of `INTENT(INOUT)` and
@@ -123,12 +174,6 @@ The first and third are needed since they're required to call the utility
 functions.  The second is needed to determine whether to call them.
 
 ## Finding the source location
-Most semantic checks are implemented by walking the parse tree and performing
-analysis on the nodes they visit.  My plan was to use this method.  The
-relevant infrastructure for walking the parse tree for semantic checking is
-implemented in the files .../lib/semantics/semantics.[cc,h].  I was familiar
-with this framework from my experience implementing other semantic checks.
-
 The source code location information that I'd need for the error message must
 come from the parse tree.  I looked in the file .../lib/parser/parse-tree.h and
 determined that a `struct Expr` contained source location information since
@@ -137,21 +182,44 @@ it had the field `CharBlock source`.  Thus, if I visited a
 associated expression.
 
 ## Determining the `INTENT`
-I knew from previous experience that I could find the `INTENT` of the dummy
-argument associated with the actual argument from the function called
-`dummyIntent()` in the class `evaluate::ActualArgument` in the file
-.../lib/evaluate/call.h.  So if I could find an `evaluate::ActualArgument` in
-the expression being passed to a function, I could determine the `INTENT` of
-the associated dummy argument.  I knew that it was valid to call
+I knew that I could find the `INTENT` of the dummy argument associated with the
+actual argument from the function called `dummyIntent()` in the class
+`evaluate::ActualArgument` in the file .../lib/evaluate/call.h.  So if I could
+find an `evaluate::ActualArgument` in an expression, I could determine the
+`INTENT` of the associated dummy argument.  I knew that it was valid to call
 `dummyIntent()` because the data on which `dummyIntent()`  depends is
 established during semantic processing for expressions, and the semantic
 processing for expressions happens before semantic checking for DO constructs.
 
-Furthermore, I knew that there was an existing framework used in DO construct
-semantic checking that traversed an `evaluate::Expr` node collecting all of
-the `Symbol` nodes.  I guessed that I'd be able to use a similar framework
-to traverse an ` evaluate::Expr`  node to find all of the
-`evaluate::ActualArgument` nodes.  
+In my prior work on checking the INTENT of arguments for SUBROUTINE calls,
+the parse tree held a node for the call (a `parser::CallStmt`) that contained
+an `evaluate::ProcedureRef` node.
+```C++
+  struct CallStmt {
+    WRAPPER_CLASS_BOILERPLATE(CallStmt, Call);
+    mutable std::unique_ptr<evaluate::ProcedureRef,
+        common::Deleter<evaluate::ProcedureRef>>
+        typedCall;  // filled by semantics
+  };
+```
+The `evaluate::ProcedureRef` contains a list of `evaluate::ActualArgument`
+nodes.  I could then find the INTENT of a dummy argument from the
+`evaluate::ActualArgument` node.
+
+For a FUNCTION call, though, there is no similar way to get from a parse tree
+node to an `evaluate::ProcedureRef` node.  But I knew that there was an
+existing framework used in DO construct semantic checking that traversed an
+`evaluate::Expr` node collecting `semantics::Symbol` nodes.  I guessed that I'd
+be able to use a similar framework to traverse an ` evaluate::Expr`  node to
+find all of the `evaluate::ActualArgument` nodes.  
+
+All of the declarations associated with both FUNCTION and SUBROUTINE
+calls are in .../lib/evaluate/call.h.  An `evaluate::FunctionRef` inherits from
+an `evaluate::ProcedureRef` which contains the list of
+`evaluate::ActualArgument` nodes.  But the relationship between an
+`evaluate::FunctionRef` node and its associated arguments is not relevant.  I
+only needed to find the `evaluate::ActualArgument` nodes in an expression.
+They hold all of the information I needed.
 
 So my plan was to start with the `parser::Expr` node and extract its
 associated `evaluate::Expr` field.  I would then traverse the
@@ -160,7 +228,7 @@ nodes.  I would look at each of these nodes to determine the `INTENT` of
 the associated dummy argument.
 
 This combination of the traversal framework and `dummyIntent()` would give
-me the `INTENT` of all of the dummy arguments in a function call.  Thus, I
+me the `INTENT` of all of the dummy arguments in a FUNCTION call.  Thus, I
 would have the second piece of information I needed.
 
 ## Determining if the actual argument is a variable
@@ -224,12 +292,12 @@ now had one of the three pieces of information needed to detect and report
 errors.
 
 ## Collecting the actual arguments
-To get the `INTENT` of the dummy arguments and the `Symbol` associated with the
+To get the `INTENT` of the dummy arguments and the `semantics::Symbol` associated with the
 actual argument, I needed to find all of the actual arguments embedded in an
-expression that contained a function call.  So my next step was to write the
+expression that contained a FUNCTION call.  So my next step was to write the
 framework to walk the `evaluate::Expr` to gather all of the
 `evaluate::ActualArgument` nodes.  The code that I planned to model it on
-was the existing infrastructure that collected all of the `Symbol` nodes from an
+was the existing infrastructure that collected all of the `semantics::Symbol` nodes from an
 `evaluate::Expr`.  I found this implementation in
 .../lib/evaluate/tools.cc:
 
@@ -266,14 +334,14 @@ Here's a sample invocation of `CollectSymbols()` that I found:
 
 I noted that a `SymbolSet` did not actually contain an
 `std::set<Symbol>`.  This wasn't surprising since we don't want to put the
-full `Symbol` objects into the set.  Ideally, we would be able to create an
+full `semantics::Symbol` objects into the set.  Ideally, we would be able to create an
 `std::set<Symbol &>` (a set of C++ references to symbols).  But C++ doesn't
 support sets that contain references.  This limitation is part of the rationale
 for the f18 implementation of type `common::Reference`, which is defined in
   .../lib/common/reference.h.
 
 `SymbolRef`, the specialization of the template `common::Reference` for
-`Symbol`, is declared in the file .../lib/semantics/symbol.h:
+`semantics::Symbol`, is declared in the file .../lib/semantics/symbol.h:
 
 ```C++
   using SymbolRef = common::Reference<const Symbol>;
@@ -434,7 +502,7 @@ So far, so good.
 ## Finding the symbols for arguments that are variables
 The third and last piece of information I needed was to determine if a variable
 was being passed as an actual argument.  In such cases, I wanted to get the
-symbol table node (`Symbol`) for the variable.  My starting point was the
+symbol table node (`semantics::Symbol`) for the variable.  My starting point was the
 `evaluate::ActualArgument` node.  
 
 I was unsure of how to do this, so I browsed through existing code to look for
@@ -471,10 +539,10 @@ I searched for `IsVariable` and got a hit immediately.
   }
 ```
 
-But I actually needed more than just the knowledge that an `evaluate::Expr`
-was a variable.  I needed the `Symbol` associated with the variable.  So I
-searched in .../lib/evaluate/tools.h for functions that returned a
-`Symbol`.  I found the following:
+But I actually needed more than just the knowledge that an `evaluate::Expr` was
+a variable.  I needed the `semantics::Symbol` associated with the variable.  So
+I searched in .../lib/evaluate/tools.h for functions that returned a
+`semantics::Symbol`.  I found the following:
 
 ```C++
 // If an expression is simply a whole symbol data designator,
@@ -490,8 +558,8 @@ template<typename A> const Symbol *UnwrapWholeSymbolDataRef(const A &x) {
 ```
 
 This was exactly what I wanted.  DO variables must be whole symbols.  So I
-could try to extract a whole `Symbol` from the `evaluate::Expr` in my
-`evaluate::ActualArgument`.  If this extraction resulted in a `Symbol`
+could try to extract a whole `semantics::Symbol` from the `evaluate::Expr` in my
+`evaluate::ActualArgument`.  If this extraction resulted in a `semantics::Symbol`
 that wasn't a `nullptr`, I could then conclude if it was a variable that I
 could pass to existing functions that would determine if it was an active DO
 variable.
@@ -528,7 +596,7 @@ Note the line that prints out the symbol table entry for the variable:
           std::cout << "Found a whole variable: " << *var << "\n";
 ```  
 
-The compiler defines the "<<" operator for `Symbol`, which is handy
+The compiler defines the "<<" operator for `semantics::Symbol`, which is handy
 for analyzing the compiler's behavior.
 
 Here's the result of running the modified compiler on my Fortran test case:
@@ -706,7 +774,7 @@ I then created a pull request to get review comments.
 # Responding to pull request comments
 I got feedback suggesting that I use an `if` statement rather than a
 `case` statement.  Another comment reminded me that I should look at the
-code I'd previously writted to do a similar check for subroutine calls to see
+code I'd previously writted to do a similar check for SUBROUTINE calls to see
 if there was an opportunity to share code.  This examination resulted in
   converting my existing code to the following pair of functions:
 
@@ -739,7 +807,7 @@ if there was an opportunity to share code.  This examination resulted in
 ```
 
 The function `CheckIfArgIsDoVar()` was shared with the checks for DO
-variables being passed to subroutine calls.
+variables being passed to SUBROUTINE calls.
 
 At this point, my pull request was approved, and I merged it and deleted the
 associated branch.
