@@ -13,7 +13,37 @@
 
 namespace Fortran::runtime::io {
 
+// Defaults
 int IoStatementState::EndIoStatement() { return GetIoStat(); }
+void IoStatementState::GetNext(DataEdit &, int) {
+  Crash("GetNext() called for I/O statement that is not a formatted data "
+        "transfer statement");
+}
+bool IoStatementState::Emit(const char *, std::size_t) {
+  Crash("Emit() called for I/O statement that is not a formatted output "
+        "statement");
+  return false;
+}
+bool IoStatementState::Emit(const char16_t *, std::size_t) {
+  Crash("Emit() called for I/O statement that is not a formatted output "
+        "statement");
+  return false;
+}
+bool IoStatementState::Emit(const char32_t *, std::size_t) {
+  Crash("Emit() called for I/O statement that is not a formatted output "
+        "statement");
+  return false;
+}
+bool IoStatementState::HandleRelativePosition(int) {
+  Crash("HandleRelativePosition() called for I/O statement that is not a "
+        "formatted data transfer statement");
+  return false;
+}
+bool IoStatementState::HandleAbsolutePosition(int) {
+  Crash("HandleAbsolutePosition() called for I/O statement that is not a "
+        "formatted data transfer statement");
+  return false;
+}
 
 int InternalIoStatementState::EndIoStatement() {
   auto result{GetIoStat()};
@@ -39,39 +69,56 @@ InternalFormattedIoStatementState<isInput,
 }
 
 template<bool isInput, typename CHAR>
-void InternalFormattedIoStatementState<isInput, CHAR>::Emit(
+bool InternalFormattedIoStatementState<isInput, CHAR>::Emit(
     const CHAR *data, std::size_t chars) {
   if constexpr (isInput) {
     FormatContext::Emit(data, chars);  // default Crash()
+    return false;
   } else if (at_ + chars > internalLength_) {
     SignalEor();
+    if (at_ < internalLength_) {
+      std::memcpy(
+          internal_ + at_, data, (internalLength_ - at_) * sizeof(CHAR));
+      at_ = internalLength_;
+    }
+    return false;
   } else {
     std::memcpy(internal_ + at_, data, chars * sizeof(CHAR));
     at_ += chars;
+    return true;
   }
 }
 
 template<bool isInput, typename CHAR>
-void InternalFormattedIoStatementState<isInput, CHAR>::HandleAbsolutePosition(
+bool InternalFormattedIoStatementState<isInput, CHAR>::HandleAbsolutePosition(
     int n) {
-  if (n < 0 || static_cast<std::size_t>(n) >= internalLength_) {
-    Crash("T%d control edit descriptor is out of range", n);
+  if (n < 0) {
+    n = 0;
+  }
+  if (static_cast<std::size_t>(n) >= internalLength_) {
+    SignalEor();
+    return false;
   } else {
     at_ = n;
+    return true;
   }
 }
 
 template<bool isInput, typename CHAR>
-void InternalFormattedIoStatementState<isInput, CHAR>::HandleRelativePosition(
+bool InternalFormattedIoStatementState<isInput, CHAR>::HandleRelativePosition(
     int n) {
   if (n < 0) {
     at_ -= std::min(at_, -static_cast<std::size_t>(n));
   } else {
-    at_ += n;
-    if (at_ > internalLength_) {
-      Crash("TR%d control edit descriptor is out of range", n);
+    if (at_ + n > internalLength_) {
+      SignalEor();
+      at_ = internalLength_;
+      return false;
+    } else {
+      at_ += n;
     }
   }
+  return true;
 }
 
 template<bool isInput, typename CHAR>

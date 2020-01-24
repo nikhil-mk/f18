@@ -15,24 +15,30 @@
 namespace Fortran::runtime::io {
 
 // Default FormatContext virtual member functions
-void FormatContext::Emit(const char *, std::size_t) {
+bool FormatContext::Emit(const char *, std::size_t) {
   Crash("Cannot emit data from this FORMAT string");
+  return false;
 }
-void FormatContext::Emit(const char16_t *, std::size_t) {
+bool FormatContext::Emit(const char16_t *, std::size_t) {
   Crash("Cannot emit data from this FORMAT string");
+  return false;
 }
-void FormatContext::Emit(const char32_t *, std::size_t) {
+bool FormatContext::Emit(const char32_t *, std::size_t) {
   Crash("Cannot emit data from this FORMAT string");
+  return false;
 }
-void FormatContext::HandleSlash(int) {
+bool FormatContext::HandleSlash(int) {
   Crash("A / control edit descriptor may not appear in this FORMAT string");
+  return false;
 }
-void FormatContext::HandleAbsolutePosition(int) {
+bool FormatContext::HandleAbsolutePosition(int) {
   Crash("A Tn control edit descriptor may not appear in this FORMAT string");
+  return false;
 }
-void FormatContext::HandleRelativePosition(int) {
+bool FormatContext::HandleRelativePosition(int) {
   Crash("An nX, TLn, or TRn control edit descriptor may not appear in this "
         "FORMAT string");
+  return false;
 }
 
 template<typename CHAR>

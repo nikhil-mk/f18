@@ -22,6 +22,12 @@ class IoStatementState : public IoErrorHandler {
 public:
   using IoErrorHandler::IoErrorHandler;
   virtual int EndIoStatement();
+  virtual void GetNext(DataEdit &, int maxRepeat = 1);
+  virtual bool Emit(const char *, std::size_t);
+  virtual bool Emit(const char16_t *, std::size_t);
+  virtual bool Emit(const char32_t *, std::size_t);
+  virtual bool HandleRelativePosition(int);
+  virtual bool HandleAbsolutePosition(int);
 
 protected:
 };
@@ -45,11 +51,15 @@ public:
   InternalFormattedIoStatementState(Buffer internal, std::size_t internalLength,
       const CHAR *format, std::size_t formatLength,
       const char *sourceFile = nullptr, int sourceLine = 0);
-  void Emit(const CHAR *, std::size_t chars);
+  bool Emit(const CHAR *, std::size_t chars);
   // TODO pmk: void HandleSlash(int);
-  void HandleRelativePosition(int);
-  void HandleAbsolutePosition(int);
+  bool HandleRelativePosition(int);
+  bool HandleAbsolutePosition(int);
   int EndIoStatement();
+
+  void GetNext(DataEdit &edit, int maxRepeat = 1) {
+    format_.GetNext(*this, edit, maxRepeat);
+  }
 
 private:
   Buffer internal_;

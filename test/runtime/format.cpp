@@ -17,17 +17,18 @@ using Results = std::list<std::string>;
 // Test harness context for format control
 struct TestFormatContext : virtual public Terminator, public FormatContext {
   TestFormatContext() : Terminator{"format.cpp", 1} {}
-  void Emit(const char *, std::size_t);
-  void HandleSlash(int = 1);
-  void HandleRelativePosition(int);
-  void HandleAbsolutePosition(int);
+  bool Emit(const char *, std::size_t);
+  bool HandleSlash(int = 1);
+  bool HandleRelativePosition(int);
+  bool HandleAbsolutePosition(int);
   void Report(const DataEdit &);
   void Check(Results &);
   Results results;
 };
 
 // Override the runtime's Crash() for testing purposes
-[[noreturn]] void Fortran::runtime::Terminator::Crash(const char *message, ...) {
+[[noreturn]] void Fortran::runtime::Terminator::Crash(
+    const char *message, ...) {
   std::va_list ap;
   va_start(ap, message);
   char buffer[1000];
@@ -36,27 +37,31 @@ struct TestFormatContext : virtual public Terminator, public FormatContext {
   throw std::string{buffer};
 }
 
-void TestFormatContext::Emit(const char *s, std::size_t len) {
+bool TestFormatContext::Emit(const char *s, std::size_t len) {
   std::string str{s, len};
   results.push_back("'"s + str + '\'');
+  return true;
 }
 
-void TestFormatContext::HandleSlash(int n) {
+bool TestFormatContext::HandleSlash(int n) {
   while (n-- > 0) {
     results.emplace_back("/");
   }
+  return true;
 }
 
-void TestFormatContext::HandleAbsolutePosition(int n) {
+bool TestFormatContext::HandleAbsolutePosition(int n) {
   results.push_back("T"s + std::to_string(n));
+  return true;
 }
 
-void TestFormatContext::HandleRelativePosition(int n) {
+bool TestFormatContext::HandleRelativePosition(int n) {
   if (n < 0) {
     results.push_back("TL"s + std::to_string(-n));
   } else {
     results.push_back(std::to_string(n) + 'X');
   }
+  return true;
 }
 
 void TestFormatContext::Report(const DataEdit &edit) {

@@ -23,7 +23,13 @@ template<typename A> A &AllocateOrCrash(Terminator &t) {
   return *reinterpret_cast<A *>(AllocateMemoryOrCrash(t, sizeof(A)));
 }
 void FreeMemory(void *);
-void FreeMemoryAndNullify(void *&);
+template<typename A> void FreeMemory(A *p) {
+  FreeMemory(reinterpret_cast<void *>(p));
+}
+template<typename A> void FreeMemoryAndNullify(A *&p) {
+  FreeMemory(p);
+  p = nullptr;
+}
 
 template<typename A> struct New {
   template<typename... X> A &operator()(Terminator &terminator, X &&... x) {

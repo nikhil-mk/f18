@@ -26,9 +26,21 @@ void OpenFile::Open(const char *path, std::size_t pathLength,
   int flags{0};
   static const char *actions[]{"READ", "WRITE", "READWRITE", nullptr};
   switch (IdentifyValue(action, actionLength, actions)) {
-  case 0: flags = O_RDONLY; break;
-  case 1: flags = O_WRONLY; break;
-  case 2: flags = O_RDWR; break;
+  case 0:
+    flags = O_RDONLY;
+    set_mayRead(true);
+    set_mayWrite(false);
+    break;
+  case 1:
+    flags = O_WRONLY;
+    set_mayRead(false);
+    set_mayWrite(true);
+    break;
+  case 2:
+    set_mayRead(true);
+    set_mayWrite(true);
+    flags = O_RDWR;
+    break;
   default:
     handler.Crash(
         "Invalid ACTION='%.*s'", action, static_cast<int>(actionLength));
@@ -123,7 +135,7 @@ void OpenFile::Close(
   }
 }
 
-std::size_t OpenFile::Read(Offset at, char *buffer, std::size_t minBytes,
+std::size_t OpenFile::Read(FileOffset at, char *buffer, std::size_t minBytes,
     std::size_t maxBytes, IoErrorHandler &handler) {
   if (maxBytes == 0) {
     return 0;
@@ -157,8 +169,8 @@ std::size_t OpenFile::Read(Offset at, char *buffer, std::size_t minBytes,
   return got;
 }
 
-std::size_t OpenFile::Write(
-    Offset at, const char *buffer, std::size_t bytes, IoErrorHandler &handler) {
+std::size_t OpenFile::Write(FileOffset at, const char *buffer,
+    std::size_t bytes, IoErrorHandler &handler) {
   if (bytes == 0) {
     return 0;
   }
@@ -187,7 +199,7 @@ std::size_t OpenFile::Write(
   return put;
 }
 
-void OpenFile::Truncate(Offset at, IoErrorHandler &handler) {
+void OpenFile::Truncate(FileOffset at, IoErrorHandler &handler) {
   CriticalSection criticalSection{lock_};
   CheckOpen(handler);
   if (!knownSize_ || *knownSize_ != at) {
@@ -202,7 +214,7 @@ void OpenFile::Truncate(Offset at, IoErrorHandler &handler) {
 // to be claimed by a later WAIT statement.
 // TODO: True asynchronicity
 int OpenFile::ReadAsynchronously(
-    Offset at, char *buffer, std::size_t bytes, IoErrorHandler &handler) {
+    FileOffset at, char *buffer, std::size_t bytes, IoErrorHandler &handler) {
   CriticalSection criticalSection{lock_};
   CheckOpen(handler);
   int iostat{0};
@@ -231,8 +243,8 @@ int OpenFile::ReadAsynchronously(
 }
 
 // TODO: True asynchronicity
-int OpenFile::WriteAsynchronously(
-    Offset at, const char *buffer, std::size_t bytes, IoErrorHandler &handler) {
+int OpenFile::WriteAsynchronously(FileOffset at, const char *buffer,
+    std::size_t bytes, IoErrorHandler &handler) {
   CriticalSection criticalSection{lock_};
   CheckOpen(handler);
   int iostat{0};
@@ -298,7 +310,7 @@ void OpenFile::CheckOpen(Terminator &terminator) {
   RUNTIME_CHECK(terminator, fd_ >= 0);
 }
 
-bool OpenFile::Seek(Offset at, IoErrorHandler &handler) {
+bool OpenFile::Seek(FileOffset at, IoErrorHandler &handler) {
   if (at == position_) {
     return true;
   } else if (RawSeek(at)) {
@@ -310,7 +322,7 @@ bool OpenFile::Seek(Offset at, IoErrorHandler &handler) {
   }
 }
 
-bool OpenFile::RawSeek(Offset at) {
+bool OpenFile::RawSeek(FileOffset at) {
 #ifdef _LARGEFILE64_SOURCE
   return ::lseek64(fd_, at, SEEK_SET) == 0;
 #else

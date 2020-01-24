@@ -46,12 +46,12 @@ class FormatContext : virtual public Terminator {
 public:
   FormatContext() {}
   explicit FormatContext(const MutableModes &modes) : mutableModes_{modes} {}
-  virtual void Emit(const char *, std::size_t);
-  virtual void Emit(const char16_t *, std::size_t);
-  virtual void Emit(const char32_t *, std::size_t);
-  virtual void HandleSlash(int = 1);
-  virtual void HandleRelativePosition(int);
-  virtual void HandleAbsolutePosition(int);
+  virtual bool Emit(const char *, std::size_t);
+  virtual bool Emit(const char16_t *, std::size_t);
+  virtual bool Emit(const char32_t *, std::size_t);
+  virtual bool HandleSlash(int = 1);
+  virtual bool HandleRelativePosition(int);
+  virtual bool HandleAbsolutePosition(int);
   MutableModes &mutableModes() { return mutableModes_; }
 
 private:
