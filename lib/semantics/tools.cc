@@ -508,7 +508,15 @@ const DeclTypeSpec *FindParentTypeSpec(const Symbol &symbol) {
   return nullptr;
 }
 
-// When an construct association maps to a variable, and that variable
+const DerivedTypeSpec *GetDerivedTypeSpec(const Symbol &symbol) {
+  if (const DeclTypeSpec * symType{symbol.GetType()}) {
+    return symType->AsDerived();
+  } else {
+    return nullptr;
+  }
+}
+
+// When a construct association maps to a variable, and that variable
 // is not an array with a vector-valued subscript, return the base
 // Symbol of that variable, else nullptr.  Descends into other construct
 // associations when one associations maps to another.
@@ -665,12 +673,21 @@ bool IsFinalizable(const DerivedTypeSpec &derived) {
       components.end();
 }
 
+// TODO The following function returns true for all types with FINAL procedures
+// This is because we don't yet fill in the data for FinalProcDetails
 bool HasImpureFinal(const DerivedTypeSpec &derived) {
   ScopeComponentIterator components{derived};
   return std::find_if(
              components.begin(), components.end(), [](const Symbol &x) {
                return x.has<FinalProcDetails>() && !x.attrs().test(Attr::PURE);
              }) != components.end();
+}
+
+bool HasImpureFinal(const Symbol &symbol) {
+  if (const DerivedTypeSpec * derived{GetDerivedTypeSpec(symbol)}) {
+    return HasImpureFinal(*derived);
+  }
+  return false;
 }
 
 bool IsCoarray(const Symbol &symbol) { return symbol.Corank() > 0; }
