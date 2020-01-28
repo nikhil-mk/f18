@@ -277,8 +277,15 @@ public:
   }
 
   Result operator()(const ArrayRef &x) const {
-    return (x.base().IsSymbol() || x.base().Rank() == 0) &&
-        CheckSubscripts(x.subscript()) && (*this)(x.base());
+    const auto &symbol{x.GetLastSymbol()};
+    if (!(*this)(symbol)) {
+      return false;
+    } else if (IsSingleElement(x.subscript())) {
+      // a(:)%b(1,1) is not contiguous; a(1)%b(:,:) is
+      return !symbol.owner().IsDerivedType() || x.Rank() == 0;
+    } else {
+      return CheckSubscripts(x.subscript());
+    }
   }
   Result operator()(const CoarrayRef &x) const {
     return CheckSubscripts(x.subscript());
@@ -318,6 +325,15 @@ private:
           anyTriplet = true;
         }
       } else if (anyTriplet || subscript[j].Rank() > 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool IsSingleElement(const std::vector<Subscript> &subscripts) {
+    for (const Subscript &subscript : subscripts) {
+      if (std::holds_alternative<Triplet>(subscript.u)) {
         return false;
       }
     }
