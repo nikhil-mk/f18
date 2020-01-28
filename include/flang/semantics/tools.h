@@ -49,8 +49,6 @@ const DeclTypeSpec *FindParentTypeSpec(const DeclTypeSpec &);
 const DeclTypeSpec *FindParentTypeSpec(const Scope &);
 const DeclTypeSpec *FindParentTypeSpec(const Symbol &);
  
-const DerivedTypeSpec *GetDerivedTypeSpec(const Symbol &);
-
 // Return the Symbol of the variable of a construct association, if it exists
 const Symbol *GetAssociationRoot(const Symbol &);
 
@@ -150,7 +148,6 @@ inline bool IsImpliedDoIndex(const Symbol &symbol) {
 bool IsFinalizable(const Symbol &);
 bool IsFinalizable(const DerivedTypeSpec &);
 bool HasImpureFinal(const DerivedTypeSpec &);
-bool HasImpureFinal(const Symbol &);
 bool IsCoarray(const Symbol &);
 inline bool IsAssumedSizeArray(const Symbol &symbol) {
   const auto *details{symbol.detailsIf<ObjectEntityDetails>()};

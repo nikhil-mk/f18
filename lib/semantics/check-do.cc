@@ -109,6 +109,19 @@ public:
   // invocation of an IMPURE final subroutine. (C1139)
   //
 
+  // Only to be called for symbols with ObjectEntityDetails
+  static bool HasImpureFinal(const Symbol &symbol) {
+    if (const Symbol * root{GetAssociationRoot(symbol)}) {
+      CHECK(root->has<ObjectEntityDetails>());
+      if (const DeclTypeSpec * symType{root->GetType()}) {
+        if (const DerivedTypeSpec * derived{symType->AsDerived()}) {
+          return semantics::HasImpureFinal(*derived);
+        }
+      }
+    }
+    return false;
+  }
+
   // Predicate for deallocations caused by block exit and direct deallocation
   static bool DeallocateAll(const Symbol &) { return true; }
 
