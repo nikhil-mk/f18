@@ -11,8 +11,8 @@
 #include "io-stmt.h"
 #include "memory.h"
 #include "terminator.h"
-#include "../lib/common/unsigned-const-division.h"
-#include "../lib/decimal/decimal.h"
+#include "flang/common/unsigned-const-division.h"
+#include "flang/decimal/decimal.h"
 #include <cstdlib>
 #include <memory>
 
@@ -111,10 +111,11 @@ bool IONAME(OutputInteger64)(Cookie io, std::int64_t n) {
   return io->Emit(p, digits);
 }
 
+#if 0 // TODO WIP
 bool IONAME(OutputReal64)(Cookie io, double) {
   DataEdit edit;
   io->GetNext(edit);
-  char stackBuffer[256], *p = stackBuffer;
+  char stackBuffer[256];
   OwningPtr<char> heap;
   if (static_cast<std::size_t>(edit.width) > sizeof stackBuffer) {
     heap.reset(reinterpret_cast<char *>(
@@ -139,6 +140,7 @@ bool IONAME(OutputReal64)(Cookie io, double) {
   }
   return false;
 }
+#endif
 
 enum Iostat IONAME(EndIoStatement)(Cookie io) {
   return static_cast<enum Iostat>(io->EndIoStatement());
